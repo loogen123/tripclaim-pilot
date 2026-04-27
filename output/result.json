@@ -1,0 +1,112 @@
+{
+  "decision": "通过",
+  "issues": [],
+  "stats": {
+    "total_files": 7,
+    "detected_types": [
+      "cash_explain_form",
+      "payment_record",
+      "reservation_form",
+      "seat_class_proof",
+      "special_approval_form",
+      "transport_invoice",
+      "verification_report"
+    ],
+    "high_issues": 0,
+    "medium_issues": 0
+  },
+  "detected_documents": [
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\1.预约报销单.pdf",
+      "type": "reservation_form",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\3.现金支出情况说明书（非公务卡支付时填写）(1).docx",
+      "type": "cash_explain_form",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\4.支付记录.docx",
+      "type": "payment_record",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\5.特殊事项审批表（有非常规情况时填写）(1).docx",
+      "type": "special_approval_form",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\6.国家税务总局全国增值税发票查验平台.pdf",
+      "type": "verification_report",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\6.电子行程单.docx",
+      "type": "transport_invoice",
+      "confidence": 0.95
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\7.经济舱字样截图.docx",
+      "type": "seat_class_proof",
+      "confidence": 0.95
+    }
+  ],
+  "file_checks": [
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\1.预约报销单.pdf",
+      "type": "reservation_form",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\3.现金支出情况说明书（非公务卡支付时填写）(1).docx",
+      "type": "cash_explain_form",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\4.支付记录.docx",
+      "type": "payment_record",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\5.特殊事项审批表（有非常规情况时填写）(1).docx",
+      "type": "special_approval_form",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\6.国家税务总局全国增值税发票查验平台.pdf",
+      "type": "verification_report",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\6.电子行程单.docx",
+      "type": "transport_invoice",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    },
+    {
+      "file": "D:\\GitProgram\\TripClaim Pilot\\报销材料\\7.经济舱字样截图.docx",
+      "type": "seat_class_proof",
+      "confidence": 0.95,
+      "status": "合规",
+      "reasons": ""
+    }
+  ],
+  "computed_values": {
+    "request_date": null,
+    "travel_date": null,
+    "ticket_amount": null,
+    "paid_amount": null
+  }
+}

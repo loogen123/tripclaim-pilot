@@ -1,0 +1,18 @@
+{
+  "required_types": [
+    "reservation_form",
+    "payment_record",
+    "transport_invoice",
+    "seat_class_proof"
+  ],
+  "one_of_required_groups": [
+    [
+      "ticket_purchase_request",
+      "special_approval_form"
+    ]
+  ],
+  "invoice_header": "电子科技大学长三角研究院（衢州）",
+  "invoice_tax_no": "12330800MB1D854661",
+  "low_confidence_threshold": 0.55,
+  "max_medium_for_auto_pass": 1
+}
