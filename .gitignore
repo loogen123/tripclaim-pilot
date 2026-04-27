@@ -1,0 +1,16 @@
+# runtime and local data
+data/
+logs/
+output/
+
+# generated python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# private reimbursement materials
+报销材料/
+学生硬核十条交通费报销流程20260408.pdf
+reimbursement_flow_extracted.txt

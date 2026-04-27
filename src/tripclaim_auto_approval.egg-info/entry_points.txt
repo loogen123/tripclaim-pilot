@@ -1,4 +1,0 @@
-[console_scripts]
-tripclaim = tripclaim.main:app
-tripclaim-api = tripclaim.api:run
-tripclaim-ui = tripclaim.ui:run
