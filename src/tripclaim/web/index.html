@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>交通费自动审批台</title>
+  <link rel="stylesheet" href="/ui/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">J</div>
+      <div class="topbar-brand-text">
+        <div class="topbar-title">TripClaim Pilot</div>
+        <div class="topbar-sub">交通费自动审批工作台</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="apiChip" class="chip red">API: disconnected</span>
+      <span id="caseChip" class="chip">案例: --</span>
+      <span id="decisionChip" class="chip">结论: 待命</span>
+    </div>
+  </header>
+
+  <section class="layout">
+    <aside class="panel">
+      <div class="hd">
+        <h2 class="title">资料控制台</h2>
+        <p class="sub">选择目录并发起自动审批</p>
+      </div>
+      <div class="bd">
+        <div class="label">资料目录</div>
+        <div id="currentFolder" class="current-folder">D:\GitProgram\TripClaim Pilot\报销材料</div>
+        <div class="action-row">
+          <button id="btnPickFolder" class="btn btn-light">选择目录</button>
+          <button id="btnListFiles" class="btn btn-light">读取文件</button>
+          <button id="btnRunAudit" class="btn btn-primary">开始校验</button>
+        </div>
+        <div>
+          <div class="kv"><span>目录文件列表</span><span id="leftFileCount">0 个</span></div>
+          <div id="leftFileTable" class="table-wrap">暂无文件</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="panel">
+      <div class="hd">
+        <h2 class="title">审批状态机</h2>
+        <p class="sub">流程状态与审导日志</p>
+      </div>
+      <div class="state-wrap">
+        <div id="stateRow" class="state-row"></div>
+        <div class="state-status">
+          <span class="state-status-dot"></span>
+          <span>当前阶段：<strong id="stageText">待命</strong></span>
+        </div>
+      </div>
+      <div class="console-hd">
+        <div class="label-inline">审导日志</div>
+        <button id="btnClearLog" class="btn btn-light">清空</button>
+      </div>
+      <div id="logContainer" class="log"></div>
+      <div class="result-wrap">
+        <div class="label-inline">问题文件</div>
+        <div id="badFiles" class="table-wrap"></div>
+      </div>
+    </main>
+
+    <aside class="panel right">
+      <div class="hd">
+        <h2 class="title">审批工作区</h2>
+        <p class="sub">文件、进度、人工复核</p>
+      </div>
+      <div class="bd workspace">
+        <div>
+          <div class="kv"><span>进度</span><span id="progressText">0/0</span></div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        </div>
+        <div>
+          <div class="kv"><span>当前案例</span><span id="caseSummary">--</span></div>
+          <div id="caseStats" class="table-wrap">等待执行校验</div>
+        </div>
+        <div>
+          <div class="kv"><span>人工复核</span><span></span></div>
+          <input id="reviewer" class="field" placeholder="审核人" value="财务老师" />
+          <select id="manualDecision" class="field">
+            <option>通过</option>
+            <option>驳回</option>
+            <option>转人工</option>
+          </select>
+          <textarea id="manualComment" class="field" placeholder="复核备注"></textarea>
+          <button id="btnManualReview" class="btn btn-primary">提交复核</button>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <script src="/ui/static/main.js"></script>
+</body>
+</html>

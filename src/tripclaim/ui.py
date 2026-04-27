@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
-import os
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -16,165 +17,158 @@ HTTP.trust_env = False
 
 def render() -> None:
     st.set_page_config(page_title="交通费审批台", layout="wide")
-    st.title("交通费自动审批台")
+    _inject_css()
     if "folder_path" not in st.session_state:
         st.session_state["folder_path"] = r"D:\GitProgram\TripClaim Pilot\报销材料"
+    if "event_logs" not in st.session_state:
+        st.session_state["event_logs"] = []
 
     api_ok, api_msg = _check_api()
-    if api_ok:
-        st.success("后端状态: 已连接")
-    else:
-        st.error(f"后端状态: 未连接 ({api_msg})")
-        st.info("请先启动后端: python -m tripclaim.api")
+    _render_top_bar(api_ok, api_msg)
 
-    c1, c2 = st.columns([5, 1])
-    with c1:
-        folder_path = st.text_input("资料文件夹路径", st.session_state["folder_path"])
-    with c2:
-        st.write("")
-        st.write("")
-        if st.button("选择文件夹"):
-            picked = _pick_folder_dialog(st.session_state["folder_path"])
-            if picked:
-                st.session_state["folder_path"] = picked
-                st.rerun()
+    left_col, center_col, right_col = st.columns([1.05, 3.2, 1.15], gap="small")
 
-    st.session_state["folder_path"] = folder_path
+    with left_col:
+        st.markdown("### 资料控制台")
+        st.caption("选择目录并发起自动校验")
+        c1, c2 = st.columns([5, 2])
+        with c1:
+            folder_path = st.text_input("资料文件夹路径", st.session_state["folder_path"])
+        with c2:
+            st.write("")
+            if st.button("选择文件夹", use_container_width=True):
+                picked = _pick_folder_dialog(st.session_state["folder_path"])
+                if picked:
+                    st.session_state["folder_path"] = picked
+                    _push_log(f"已选择目录: {picked}")
+                    st.rerun()
+        st.session_state["folder_path"] = folder_path
+
+        st.markdown(
+            '<div class="mode-card active"><b>自动校验模式</b><br/>按硬核十条规则逐文件核验</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="mode-card"><b>人工复核模式</b><br/>自动结果基础上可改判并留痕</div>',
+            unsafe_allow_html=True,
+        )
+
     folder_path = st.session_state["folder_path"]
     files = _list_files(folder_path)
-    st.subheader("文件夹文件列表")
-    if files:
-        st.dataframe(files, width="stretch")
-    else:
-        st.info("当前目录无可识别文件或路径不存在")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("开始校验", type="primary"):
-            try:
-                resp = HTTP.post(
-                    f"{API_BASE}/cases",
-                    json={"folder_path": folder_path},
-                    timeout=30,
-                )
-                if not resp.ok:
-                    st.error(_resp_error(resp))
-                else:
-                    case_id = resp.json()["case_id"]
-                    run_resp = HTTP.post(f"{API_BASE}/cases/{case_id}/run", timeout=180)
-                    if run_resp.ok:
-                        st.session_state["case_id"] = case_id
-                        payload = run_resp.json()
-                        st.session_state["last_case_data"] = {
-                            "id": case_id,
-                            "status": "auto_reviewed",
-                            "decision": payload.get("decision"),
-                            "folder_path": folder_path,
-                            "result": payload.get("result"),
-                            "manual_reviews": [],
-                        }
-                        st.success(f"校验完成，case_id={case_id}")
-                    else:
-                        st.error(_resp_error(run_resp))
-            except Exception as e:
-                st.error(f"校验失败: {e}")
-    with col2:
-        if st.button("刷新上次结果"):
-            case_id = st.session_state.get("case_id")
-            if case_id:
-                data, err = _fetch_case(int(case_id))
-                if data:
-                    st.session_state["last_case_data"] = data
-                    st.success("结果已刷新")
-                else:
-                    st.error(f"刷新失败: {err or '未查询到案例'}")
 
     case_id = st.session_state.get("case_id")
-    if not case_id:
-        return
     data = st.session_state.get("last_case_data")
-    if not data:
-        data, err = _fetch_case(int(case_id))
-        if data:
-            st.session_state["last_case_data"] = data
-        else:
-            st.error(f"结果加载失败: {err or '未查询到案例结果'}")
-            return
+    if case_id and not data:
+        loaded, err = _fetch_case(int(case_id))
+        if loaded:
+            st.session_state["last_case_data"] = loaded
+            data = loaded
+        elif err:
+            _push_log(f"结果加载失败: {err}")
 
-    st.subheader("自动审批结果")
-    st.write(
-        {
-            "case_id": data["id"],
-            "status": data["status"],
-            "decision": data["decision"],
-            "folder_path": data["folder_path"],
-        }
-    )
-
-    result = data.get("result") or {}
-    log_path = result.get("file_audit_log_path")
-    if log_path:
-        st.subheader("审核日志")
-        st.code(log_path, language="text")
-        p = Path(log_path)
-        if p.exists():
-            st.text_area("日志内容", p.read_text(encoding="utf-8"), height=220)
-
-    st.subheader("逐文件校验结果")
+    result = (data or {}).get("result") or {}
     file_checks = result.get("file_checks", [])
-    if file_checks:
-        bad_rows = [
-            row for row in file_checks if row.get("status") in {"不合规", "待复核"}
-        ]
-        st.subheader("有问题文件")
+    bad_rows = [row for row in file_checks if row.get("status") in {"不合规", "待复核"}]
+    decision = (data or {}).get("decision", "STANDBY")
+    status_name = _display_decision("STANDBY" if not data else str(decision))
+
+    with center_col:
+        st.markdown("### 审批流状态机")
+        st.caption("实时展示当前审批阶段")
+        _render_state_machine(data)
+        b1, b2, b3 = st.columns([1.2, 1.2, 1.0])
+        with b1:
+            if st.button("开始校验", type="primary", use_container_width=True):
+                _start_audit(folder_path)
+                st.rerun()
+        with b2:
+            if st.button("刷新结果", use_container_width=True):
+                _refresh_case()
+                st.rerun()
+        with b3:
+            if st.button("清空日志", use_container_width=True):
+                st.session_state["event_logs"] = []
+                st.rerun()
+
+        st.markdown(
+            f'<div class="status-line"><span class="status-dot"></span>当前阶段：<b>{status_name}</b></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("#### 审导日志")
+        logs = st.session_state.get("event_logs", [])
+        if logs:
+            st.markdown(_render_logs_html(logs[-20:]), unsafe_allow_html=True)
+        else:
+            st.info("暂无日志")
+
+        st.markdown("#### 有问题文件")
         if bad_rows:
             st.dataframe(
-                [
-                    {
-                        "文件": row.get("file", ""),
-                        "状态": row.get("status", ""),
-                        "原因": row.get("reasons", ""),
-                    }
-                    for row in bad_rows
-                ],
+                [{"文件": r["file"], "状态": r["status"], "原因": r["reasons"]} for r in bad_rows],
                 width="stretch",
             )
         else:
             st.success("当前案例无问题文件")
 
-        st.subheader("全部文件校验明细")
-        st.dataframe(file_checks, width="stretch")
-    else:
-        st.write("暂无逐文件结果")
+        with st.expander("全部文件校验明细", expanded=False):
+            if file_checks:
+                st.dataframe(file_checks, width="stretch")
+            else:
+                st.write("暂无数据")
 
-    issues = result.get("issues", [])
-    st.subheader("问题列表")
-    if issues:
-        st.dataframe(issues, width="stretch")
-    else:
-        st.write("无问题")
-
-    st.subheader("人工复核")
-    reviewer = st.text_input("审核人", "财务老师")
-    decision = st.selectbox("改判结论", ["通过", "驳回", "转人工"])
-    comment = st.text_area("复核备注", "")
-    if st.button("提交人工复核"):
-        resp = HTTP.post(
-            f"{API_BASE}/cases/{case_id}/manual-review",
-            json={"reviewer": reviewer, "decision": decision, "comment": comment},
-            timeout=30,
+    with right_col:
+        st.markdown("### 审批工作区")
+        st.caption("结果总览与人工复核")
+        total = len(files)
+        checked = len(file_checks)
+        bad = len(bad_rows)
+        progress = int((checked / total) * 100) if total else 0
+        st.markdown(
+            f"""
+<div class="work-card">
+  <div class="metric-row">
+    <span class="metric-pill">状态：{status_name}</span>
+    <span class="metric-pill">进度：{checked}/{total}</span>
+    <span class="metric-pill">问题：{bad} 个</span>
+  </div>
+  <div class="progress-track"><div class="progress-bar" style="width:{progress}%"></div></div>
+  <div class="progress-text">{progress}%</div>
+</div>
+""",
+            unsafe_allow_html=True,
         )
-        if resp.ok:
-            st.success("人工复核提交成功")
+        st.markdown("**文件列表**")
+        if files:
+            st.dataframe(files, width="stretch")
         else:
-            st.error(resp.text)
+            st.info("暂无文件")
 
-    st.subheader("人工复核记录")
-    reviews = data.get("manual_reviews", [])
-    if reviews:
-        st.dataframe(reviews, width="stretch")
-    else:
-        st.write("暂无人工复核记录")
+        st.markdown("**人工复核**")
+        reviewer = st.text_input("审核人", "财务老师")
+        manual_decision = st.selectbox("改判结论", ["通过", "驳回", "转人工"])
+        comment = st.text_area("复核备注", "")
+        if st.button("提交人工复核", use_container_width=True):
+            if not case_id:
+                st.error("请先开始校验")
+            else:
+                resp = HTTP.post(
+                    f"{API_BASE}/cases/{case_id}/manual-review",
+                    json={"reviewer": reviewer, "decision": manual_decision, "comment": comment},
+                    timeout=30,
+                )
+                if resp.ok:
+                    _push_log(f"人工复核提交成功: {manual_decision}")
+                    st.success("提交成功")
+                else:
+                    st.error(_resp_error(resp))
+
+    if data:
+        with st.expander("人工复核记录", expanded=False):
+            reviews = data.get("manual_reviews", [])
+            if reviews:
+                st.dataframe(reviews, width="stretch")
+            else:
+                st.write("暂无人工复核记录")
 
 
 def _fetch_case(case_id: int) -> tuple[dict | None, str | None]:
@@ -195,6 +189,120 @@ def _check_api() -> tuple[bool, str]:
         return False, f"http {resp.status_code}"
     except Exception as e:
         return False, str(e)
+
+
+def _start_audit(folder_path: str) -> None:
+    try:
+        resp = HTTP.post(
+            f"{API_BASE}/cases",
+            json={"folder_path": folder_path},
+            timeout=30,
+        )
+        if not resp.ok:
+            _push_log(f"创建案例失败: {_resp_error(resp)}")
+            return
+        case_id = resp.json()["case_id"]
+        _push_log(f"案例创建成功: case_id={case_id}")
+        run_resp = HTTP.post(f"{API_BASE}/cases/{case_id}/run", timeout=180)
+        if not run_resp.ok:
+            _push_log(f"自动校验失败: {_resp_error(run_resp)}")
+            return
+        payload = run_resp.json()
+        st.session_state["case_id"] = case_id
+        st.session_state["last_case_data"] = {
+            "id": case_id,
+            "status": "auto_reviewed",
+            "decision": payload.get("decision"),
+            "folder_path": folder_path,
+            "result": payload.get("result"),
+            "manual_reviews": [],
+        }
+        _push_log(f"校验完成: {payload.get('decision')}")
+    except Exception as e:
+        _push_log(f"校验失败: {e}")
+
+
+def _refresh_case() -> None:
+    case_id = st.session_state.get("case_id")
+    if not case_id:
+        _push_log("无可刷新的案例")
+        return
+    data, err = _fetch_case(int(case_id))
+    if data:
+        st.session_state["last_case_data"] = data
+        _push_log("结果已刷新")
+    else:
+        _push_log(f"刷新失败: {err or '未查询到案例'}")
+
+
+def _push_log(text: str) -> None:
+    st.session_state["event_logs"].append(
+        {"time": datetime.now().strftime("%H:%M:%S"), "text": text}
+    )
+
+
+def _render_top_bar(api_ok: bool, api_msg: str) -> None:
+    left, right = st.columns([3.5, 2.2])
+    with left:
+        st.markdown("## 交通费自动审批台")
+        st.caption("学生硬核十条自动审单系统")
+    with right:
+        api_badge = "已连接" if api_ok else f"未连接 ({api_msg})"
+        case_id = st.session_state.get("case_id", "--")
+        decision = (
+            (st.session_state.get("last_case_data") or {}).get("decision")
+            if st.session_state.get("last_case_data")
+            else "待命"
+        )
+        decision = _display_decision(str(decision))
+        st.markdown(
+            f"""
+<div class="badge-row">
+  <span class="badge {'green' if api_ok else 'red'}">后端: {api_badge}</span>
+  <span class="badge blue">案例: {case_id}</span>
+  <span class="badge blue">结论: {decision}</span>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_state_machine(data: dict | None) -> None:
+    steps = ["待命", "创建案例", "读取资料", "材料识别", "规则校验", "结论生成", "已完成"]
+    active_index = 0 if not data else len(steps) - 1
+    html = ['<div class="step-row">']
+    for i, step in enumerate(steps):
+        cls = "step active" if i <= active_index else "step"
+        html.append(f'<div class="{cls}">{step}</div>')
+        if i < len(steps) - 1:
+            html.append('<div class="arrow">→</div>')
+    html.append("</div>")
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def _display_decision(value: str) -> str:
+    mapping = {
+        "STANDBY": "待命",
+        "PASS": "通过",
+        "REJECT": "驳回",
+        "MANUAL_REVIEW": "转人工",
+        "待命": "待命",
+        "通过": "通过",
+        "驳回": "驳回",
+        "转人工": "转人工",
+    }
+    return mapping.get(value, value)
+
+
+def _render_logs_html(logs: list[dict]) -> str:
+    lines = []
+    for item in reversed(logs):
+        ts = item.get("time", "")
+        text = str(item.get("text", ""))
+        lines.append(
+            f'<div class="log-line"><span class="log-time">{ts}</span><span class="log-text">{text}</span></div>'
+        )
+    return f'<div class="log-wrap">{"".join(lines)}</div>'
 
 
 def _resp_error(resp: requests.Response) -> str:
@@ -247,6 +355,54 @@ def _list_files(folder_path: str) -> list[dict]:
 
 def run() -> None:
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(Path(__file__))], check=False)
+
+
+def _inject_css() -> None:
+    st.markdown(
+        """
+<style>
+:root { --bg:#f5f7fb; --card:#fff; --line:#e4ecf7; --line2:#d6e0f0; --text:#1f2a44; --muted:#7484a0; --blue:#6aa6ff; --green:#2fb267; --red:#e56a6a; }
+.stApp { background: var(--bg); color: var(--text); }
+div[data-testid="stVerticalBlockBorderWrapper"] { border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.stTextInput input, .stTextArea textarea, .stSelectbox [data-baseweb="select"] > div {
+  border-radius: 10px !important;
+  border-color: var(--line2) !important;
+}
+.stButton button {
+  border-radius: 10px !important;
+  border: 1px solid var(--line2) !important;
+}
+.stButton button[kind="primary"] {
+  border: none !important;
+  background: linear-gradient(180deg,#5fa2ff,#4b8ff2) !important;
+}
+.mode-card { background: #ffffff; border: 1px solid var(--line2); border-radius: 12px; padding: 12px; margin: 8px 0; font-size: 13px; }
+.mode-card.active { border-color: var(--blue); box-shadow: 0 0 0 1px rgba(106,166,255,.5) inset; }
+.work-card { background: #fcfdff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 13px; margin-bottom: 10px; }
+.metric-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.metric-pill { border:1px solid #d6e4ff; background:#eef4ff; color:#2f5d9e; border-radius:999px; padding:4px 10px; font-size:12px; }
+.progress-track { height:8px; border-radius:999px; background:#edf2fb; border:1px solid #e2e9f6; overflow:hidden; }
+.progress-bar { height:100%; background:linear-gradient(90deg,#95bfff,#5a96ef); transition:width .4s ease; }
+.progress-text { margin-top:6px; color:#60708e; font-size:12px; text-align:right; }
+.badge-row { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+.badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid; }
+.badge.red { color: #d85555; border-color: #f1c3c3; background: #fff7f7; }
+.badge.green { color: #2d9e5d; border-color: #cce8d6; background: #f4fff8; }
+.badge.blue { color: #2f5d9e; border-color: #cfe0ff; background: #eef4ff; }
+.status-line { margin:6px 0 8px 0; display:flex; align-items:center; gap:8px; color:#4a5d7d; font-size:13px; }
+.status-dot { width:10px; height:10px; border-radius:999px; background:#6aa6ff; box-shadow:0 0 0 4px rgba(106,166,255,.15); }
+.step-row { display: flex; align-items: center; gap: 6px; padding: 8px 0 14px 0; overflow-x: auto; }
+.step { min-width: 86px; text-align: center; background: #fff; border: 1px solid var(--line2); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: #3d4a66; }
+.step.active { border-color: #78a7ff; color: #1d4ed8; box-shadow: 0 0 8px rgba(98,154,255,.3); font-weight: 600; }
+.arrow { color: #9cb0cc; font-size: 16px; }
+.log-wrap { background:#fafcff; border:1px solid var(--line); border-radius:10px; padding:8px; max-height:270px; overflow:auto; }
+.log-line { border:1px solid var(--line); background:#fff; border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; gap:10px; }
+.log-time { color:#6e7f9a; min-width:56px; font-size:12px; }
+.log-text { color:#30435f; font-size:13px; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
