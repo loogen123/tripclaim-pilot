@@ -91,7 +91,7 @@ def render() -> None:
                 st.rerun()
 
         st.markdown(
-            f'<div class="status-line"><span class="status-dot"></span>当前阶段：<b>{status_name}</b></div>',
+            f'<div class="status-line"><span class="status-dot"></span>当前阶段：<b>{status_name}</b> | 防伪分：<b>{result.get("fraud_score_total", 0)}</b></div>',
             unsafe_allow_html=True,
         )
         st.markdown("#### 审导日志")

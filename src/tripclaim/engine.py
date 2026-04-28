@@ -6,6 +6,7 @@ from .classifier import classify_document
 from .models import AuditResult, Document, Issue
 from .parsers import extract_text, scan_files
 from .rules import load_rule_config, run_rules
+from .verification import process_fraud_detection
 
 
 def audit_folder(folder: Path) -> AuditResult:
@@ -24,6 +25,8 @@ def audit_folder(folder: Path) -> AuditResult:
                 fields={},
             )
         )
+
+    process_fraud_detection(documents)
 
     issues, computed_values = run_rules(documents)
 
@@ -52,6 +55,7 @@ def audit_folder(folder: Path) -> AuditResult:
         for doc in documents
     ]
     file_checks = build_file_checks(documents, issues, float(cfg.get("low_confidence_threshold", 0.65)))
+    fraud_score_total = sum(doc.fraud_score for doc in documents)
     return AuditResult(
         decision=decision,
         issues=issues,
@@ -59,6 +63,7 @@ def audit_folder(folder: Path) -> AuditResult:
         detected_documents=detected_documents,
         file_checks=file_checks,
         computed_values=computed_values,
+        fraud_score_total=fraud_score_total,
     )
 
 
@@ -92,11 +97,19 @@ def build_file_checks(
         if has_high:
             status = "不合规"
             reasons = [item.message for item in matched if item.severity == "high"]
+        if doc.fraud_score >= 70:
+            status = "不合规"
+            reasons.extend(doc.fraud_reasons)
+        elif doc.fraud_score > 0:
+            status = "待复核"
+            reasons.extend(doc.fraud_reasons)
+
         result.append(
             {
                 "file": str(doc.path),
                 "type": doc.doc_type,
                 "confidence": round(doc.confidence, 2),
+                "fraud_score": doc.fraud_score,
                 "status": status,
                 "reasons": "；".join(dict.fromkeys(reasons)) if reasons else "",
             }

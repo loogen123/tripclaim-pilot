@@ -38,6 +38,8 @@ def audit(
         folder_path=str(folder),
     )
     typer.echo(f"审批完成: {result.decision}")
+    typer.echo(f"高风险: {result.stats['high_issues']} | 中风险: {result.stats['medium_issues']}")
+    typer.echo(f"造假风险分: {result.fraud_score_total}")
     typer.echo(f"JSON: {json_path}")
     typer.echo(f"MD: {md_path}")
     typer.echo(f"LOG: {log_path}")
@@ -51,6 +53,7 @@ def render_markdown(data: dict) -> str:
         f"- 总文件数: {data['stats']['total_files']}",
         f"- 高风险问题: {data['stats']['high_issues']}",
         f"- 中风险问题: {data['stats']['medium_issues']}",
+        f"- 造假风险分 (Fraud Score): {data.get('fraud_score_total', 0)}",
         "",
         "## 问题列表",
     ]
@@ -65,7 +68,9 @@ def render_markdown(data: dict) -> str:
     lines.append("")
     lines.append("## 材料识别")
     for doc in data.get("detected_documents", []):
-        lines.append(f"- {doc['type']} | {doc['confidence']} | {doc['file']}")
+        f_score = doc.get('fraud_score', 0)
+        f_info = f" (风险分:{f_score})" if f_score > 0 else ""
+        lines.append(f"- {doc['type']} | {doc['confidence']}{f_info} | {Path(doc['file']).name}")
     return "\n".join(lines) + "\n"
 
 

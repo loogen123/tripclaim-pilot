@@ -67,6 +67,24 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
                     evidence=doc.path.name,
                 )
             )
+        if doc.verify_status == "invalid":
+            issues.append(
+                Issue(
+                    rule_id="R-FAKE-001",
+                    severity="high",
+                    message="联网查验失败：发票为假或已作废",
+                    evidence=doc.path.name,
+                )
+            )
+        if "发现重复报销票据" in str(doc.fraud_reasons):
+            issues.append(
+                Issue(
+                    rule_id="R-DUPLICATE-001",
+                    severity="high",
+                    message="发现重复报销的票据",
+                    evidence=doc.path.name,
+                )
+            )
 
     request_date = find_request_date(grouped.get("ticket_purchase_request", []))
     travel_date = find_travel_date(
@@ -111,11 +129,22 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
             )
         )
 
-    ticket_amount = extract_amount(all_text, ["票面金额", "发票金额"])
-    paid_amount = extract_amount(all_text, ["实付金额", "实际实付金额", "实际支付金额"])
+    ticket_amount = sum(
+        float(doc.fields.get("amount", 0) or 0)
+        for doc in grouped.get("transport_invoice", [])
+    )
+    paid_amount = sum(
+        float(doc.fields.get("paid_amount", 0) or 0)
+        for doc in grouped.get("payment_record", [])
+    )
+    if not ticket_amount:
+        ticket_amount = extract_amount(all_text, ["票面金额", "发票金额"]) or 0.0
+    if not paid_amount:
+        paid_amount = extract_amount(all_text, ["实付金额", "实际实付金额", "实际支付金额"]) or 0.0
+
     computed["ticket_amount"] = ticket_amount
     computed["paid_amount"] = paid_amount
-    if ticket_amount is not None and paid_amount is not None and abs(ticket_amount - paid_amount) > 0.01:
+    if ticket_amount > 0 and paid_amount > 0 and abs(ticket_amount - paid_amount) > 0.01:
         computed["reimbursable_amount"] = round(min(ticket_amount, paid_amount), 2)
         if "差异原因" not in all_text:
             issues.append(
@@ -147,9 +176,8 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
                     evidence="transport_invoice",
                 )
             )
-        if not any(
-            doc.doc_type == "verification_report" for doc in documents
-        ) and "验证报告" not in all_text:
+        verification_docs = grouped.get("verification_report", [])
+        if not verification_docs and "验证报告" not in all_text:
             issues.append(
                 Issue(
                     rule_id="R-INVOICE-003",
@@ -158,6 +186,19 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
                     evidence="transport_invoice",
                 )
             )
+        elif verification_docs:
+            ver_text = "\n".join(d.raw_text for d in verification_docs)
+            for inv_doc in grouped.get("transport_invoice", []):
+                inv_num = inv_doc.fields.get("invoice_number") or inv_doc.fields.get("ticket_number")
+                if inv_num and inv_num not in ver_text:
+                    issues.append(
+                        Issue(
+                            rule_id="R-INVOICE-003",
+                            severity="high",
+                            message=f"验证报告中未找到该发票记录 (票号: {inv_num})",
+                            evidence=inv_doc.path.name,
+                        )
+                    )
         if "承诺首次报销不重复报销" not in all_text:
             issues.append(
                 Issue(

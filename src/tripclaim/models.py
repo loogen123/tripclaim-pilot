@@ -13,6 +13,9 @@ class Document:
     doc_type: str = "unknown"
     confidence: float = 0.0
     fields: dict[str, Any] = field(default_factory=dict)
+    fraud_score: int = 0
+    fraud_reasons: list[str] = field(default_factory=list)
+    verify_status: str = "unchecked"
 
 
 @dataclass
@@ -34,6 +37,7 @@ class AuditResult:
     detected_documents: list[dict[str, Any]]
     file_checks: list[dict[str, Any]]
     computed_values: dict[str, Any]
+    fraud_score_total: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,4 +47,5 @@ class AuditResult:
             "detected_documents": self.detected_documents,
             "file_checks": self.file_checks,
             "computed_values": self.computed_values,
+            "fraud_score_total": self.fraud_score_total,
         }

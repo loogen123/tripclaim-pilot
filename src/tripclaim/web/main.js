@@ -64,11 +64,13 @@ function renderFileTable(files) {
 function renderCaseStats(runData) {
   const stats = runData?.result?.stats || {};
   document.getElementById("caseSummary").textContent = `${runData?.case_id ?? "--"} / ${runData?.decision ?? "--"}`;
-  document.getElementById("caseStats").innerHTML = `
-    <div>总文件数：${esc(stats.total_files ?? 0)}</div>
-    <div>高风险问题：${esc(stats.high_issues ?? 0)}</div>
-    <div>中风险问题：${esc(stats.medium_issues ?? 0)}</div>
-  `;
+  const fraudTotal = runData?.result?.fraud_score_total || 0;
+    document.getElementById("caseStats").innerHTML = `
+      <div>总文件数：${esc(stats.total_files ?? 0)}</div>
+      <div>高风险问题：${esc(stats.high_issues ?? 0)}</div>
+      <div>中风险问题：${esc(stats.medium_issues ?? 0)}</div>
+      <div style="color: ${fraudTotal > 0 ? '#ff4d4f' : 'inherit'}">防伪分：${esc(fraudTotal)}</div>
+    `;
 }
 
 function statusClass(status) {
