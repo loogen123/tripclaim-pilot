@@ -101,6 +101,11 @@ def render() -> None:
         else:
             st.info("暂无日志")
 
+        global_issues = result.get("global_issues", [])
+        if global_issues:
+            for gi in global_issues:
+                st.error(f"🔴 **全局问题**：{gi['message']}")
+
         st.markdown("#### 有问题文件")
         if bad_rows:
             st.dataframe(

@@ -50,7 +50,7 @@ def list_files_api(req: ListFilesRequest) -> dict[str, Any]:
     folder = Path(req.folder_path)
     if not folder.exists() or not folder.is_dir():
         raise HTTPException(status_code=400, detail="folder_path 不存在或不是目录")
-    allowed = {".pdf", ".doc", ".docx", ".txt", ".png", ".jpg", ".jpeg"}
+    allowed = {".pdf", ".ofd", ".doc", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".bmp"}
     files: list[dict[str, Any]] = []
     for item in sorted(folder.glob("*")):
         if not item.is_file():
@@ -98,6 +98,7 @@ def run_case_api(case_id: int) -> dict[str, Any]:
     result = audit_folder(Path(case["folder_path"])).to_dict()
     log_path = write_file_audit_log(
         file_checks=result.get("file_checks", []),
+        global_issues=result.get("global_issues", []),
         output_path=Path("logs") / f"case_{case_id}_file_audit.log",
         case_id=case_id,
         folder_path=case["folder_path"],

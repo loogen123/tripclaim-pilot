@@ -26,26 +26,40 @@ def save_db(data: dict[str, Any]) -> None:
 
 def extract_qr_data(image_path: Path) -> dict[str, str]:
     """使用 pyzbar 从发票图片中提取二维码信息"""
-    if not image_path.exists() or image_path.suffix.lower() not in [".jpg", ".jpeg", ".png", ".bmp"]:
+    if not image_path.exists() or image_path.suffix.lower() not in [".jpg", ".jpeg", ".png", ".bmp", ".webp"]:
         return {}
     try:
-        from PIL import Image
+        from PIL import Image, ImageEnhance, ImageOps
         from pyzbar.pyzbar import decode
         img = Image.open(image_path)
-        barcodes = decode(img)
-        for barcode in barcodes:
-            data = barcode.data.decode("utf-8")
-            if data.startswith("01,"):
-                fields = data.split(",")
-                if len(fields) >= 7:
-                    return {
-                        "invoice_code": fields[2],
-                        "invoice_number": fields[3],
-                        "amount_pre_tax": fields[4],
-                        "date": fields[5],
-                        "check_code": fields[6]
-                    }
-    except Exception as e:
+
+        def _parse(decoded: list) -> dict[str, str]:
+            for barcode in decoded:
+                data = barcode.data.decode("utf-8", errors="ignore")
+                if data.startswith("01,"):
+                    fields = data.split(",")
+                    if len(fields) >= 7:
+                        return {
+                            "invoice_code": fields[2],
+                            "invoice_number": fields[3],
+                            "amount_pre_tax": fields[4],
+                            "date": fields[5],
+                            "check_code": fields[6],
+                        }
+            return {}
+
+        parsed = _parse(decode(img))
+        if parsed:
+            return parsed
+
+        # 二次尝试：增强对比度与锐化，提升复杂截图二维码识别率
+        gray = ImageOps.grayscale(img)
+        enhanced = ImageEnhance.Contrast(gray).enhance(2.0)
+        sharpened = ImageEnhance.Sharpness(enhanced).enhance(2.0)
+        parsed = _parse(decode(sharpened))
+        if parsed:
+            return parsed
+    except Exception:
         pass
     return {}
 
@@ -130,30 +144,10 @@ def process_fraud_detection(documents: list[Document]) -> None:
         if doc.doc_type == "transport_invoice":
             extracted = extract_invoice_fields(doc.raw_text)
             doc.fields.update(extracted)
-            
-            # 发票内部逻辑交叉校验 (大写=小写=税额+金额)
-            try:
-                amt = float(extracted.get("amount", 0))
-                pre_tax = float(extracted.get("amount_pre_tax", 0))
-                tax = float(extracted.get("tax_amount", 0))
-                if amt > 0 and pre_tax > 0 and tax > 0:
-                    if abs((pre_tax + tax) - amt) > 0.05:
-                        doc.fraud_score += 40
-                        doc.fraud_reasons.append(f"发票金额逻辑异常: 不含税金额({pre_tax}) + 税额({tax}) ≠ 总金额({amt})")
-            except ValueError:
-                pass
 
             # 二维码校验防篡改与强制检测
             qr_data = extract_qr_data(doc.path)
-            
-            # 判断是否为电子票据（必须有二维码）
-            is_electronic = any(kw in doc.raw_text for kw in ["电子发票", "电子客票", "电子行程单", "数电票"])
-            
-            if is_electronic and not qr_data:
-                # 电子票据必须能扫出二维码，否则视为异常
-                doc.fraud_score += 40
-                doc.fraud_reasons.append("电子票据未识别到有效二维码，疑似截图不全或模糊篡改")
-                
+
             if qr_data:
                 qr_amt = qr_data.get("amount_pre_tax") or qr_data.get("amount")
                 ocr_amt = extracted.get("amount_pre_tax") or extracted.get("amount")

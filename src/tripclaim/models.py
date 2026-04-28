@@ -38,6 +38,7 @@ class AuditResult:
     file_checks: list[dict[str, Any]]
     computed_values: dict[str, Any]
     fraud_score_total: int = 0
+    global_issues: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -48,4 +49,5 @@ class AuditResult:
             "file_checks": self.file_checks,
             "computed_values": self.computed_values,
             "fraud_score_total": self.fraud_score_total,
+            "global_issues": self.global_issues,
         }

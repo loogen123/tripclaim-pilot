@@ -7,6 +7,7 @@ from pathlib import Path
 def write_file_audit_log(
     *,
     file_checks: list[dict],
+    global_issues: list[dict] | None = None,
     output_path: Path,
     case_id: int | None = None,
     folder_path: str | None = None,
@@ -28,8 +29,21 @@ def write_file_audit_log(
                     f"confidence={item.get('confidence', '')}",
                     f"file={item.get('file', '')}",
                     f"reasons={item.get('reasons', '')}",
+                    f"debug={item.get('debug', '')}",
                 ]
             )
         )
+    if global_issues:
+        lines.append("---- global_issues ----")
+        for item in global_issues:
+            lines.append(
+                " | ".join(
+                    [
+                        f"severity={item.get('severity', '')}",
+                        f"rule_id={item.get('rule_id', '')}",
+                        f"message={item.get('message', '')}",
+                    ]
+                )
+            )
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path

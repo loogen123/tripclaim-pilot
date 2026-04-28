@@ -33,6 +33,18 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
     tax_no = config["invoice_tax_no"]
     low_confidence_threshold = float(config["low_confidence_threshold"])
 
+    type_names = {
+        "process_guide": "报销流程指南",
+        "reservation_form": "预约报销单",
+        "ticket_purchase_request": "交通票购票申请",
+        "payment_record": "支付记录凭证",
+        "special_approval_form": "特殊事项审批表",
+        "transport_invoice": "交通电子票据",
+        "seat_class_proof": "舱位/行程凭证",
+        "cash_explain_form": "现金支出说明书",
+        "verification_report": "发票查验报告",
+    }
+
     grouped = group_by_type(documents)
     for required in sorted(required_types):
         if not grouped.get(required):
@@ -40,14 +52,14 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
                 Issue(
                     rule_id=f"R-COMPLETE-{required}",
                     severity="high",
-                    message=f"缺少必需材料: {required}",
+                    message=f"缺少必需材料: {type_names.get(required, required)}",
                     evidence="materials",
                 )
             )
 
     for group in one_of_required_groups:
         if not any(grouped.get(item) for item in group):
-            group_name = " 或 ".join(group)
+            group_name = " 或 ".join(type_names.get(item, item) for item in group)
             issues.append(
                 Issue(
                     rule_id="R-COMPLETE-GROUP",
@@ -110,24 +122,40 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
             )
 
     all_text = "\n".join(doc.raw_text for doc in documents)
-    if "YS102102" not in all_text:
-        issues.append(
-            Issue(
-                rule_id="R-FIELD-001",
-                severity="medium",
-                message="未识别到报销项目号 YS102102",
-                evidence="reservation_form",
+    clean_text = "".join(all_text.split())  # 去除所有空格、换行符的纯净版文本
+    
+    reservation_text = "\n".join(doc.raw_text for doc in grouped.get("reservation_form", []))
+    reservation_clean = "".join(reservation_text.split())
+    # 仅在预约报销单文本有效时再做字段校验，避免OCR空文本导致误判
+    if len(reservation_clean) >= 20:
+        if not re.search(r"YS[1lI][0O]2[1lI][0O]2", reservation_clean, re.IGNORECASE):
+            issues.append(
+                Issue(
+                    rule_id="R-FIELD-001",
+                    severity="medium",
+                    message="未识别到报销项目号 YS102102",
+                    evidence="reservation_form",
+                )
             )
-        )
-    if "转卡" not in all_text:
-        issues.append(
-            Issue(
-                rule_id="R-FIELD-002",
-                severity="medium",
-                message="未识别到支付方式 转卡",
-                evidence="reservation_form",
+        payment_method_patterns = [
+            r"转卡",
+            r"转账",
+            r"银行卡",
+            r"银行转账",
+            r"对公转账",
+            r"网银",
+            r"微信支付",
+            r"支付宝",
+        ]
+        if not any(re.search(pattern, reservation_clean, re.IGNORECASE) for pattern in payment_method_patterns):
+            issues.append(
+                Issue(
+                    rule_id="R-FIELD-002",
+                    severity="medium",
+                    message="未识别到支付方式(转卡/转账/银行卡/微信支付/支付宝)",
+                    evidence="reservation_form",
+                )
             )
-        )
 
     ticket_amount = sum(
         float(doc.fields.get("amount", 0) or 0)
@@ -173,38 +201,6 @@ def run_rules(documents: list[Document]) -> tuple[list[Issue], dict[str, object]
                     rule_id="R-INVOICE-002",
                     severity="high",
                     message="电子票据未识别到纳税识别号",
-                    evidence="transport_invoice",
-                )
-            )
-        verification_docs = grouped.get("verification_report", [])
-        if not verification_docs and "验证报告" not in all_text:
-            issues.append(
-                Issue(
-                    rule_id="R-INVOICE-003",
-                    severity="medium",
-                    message="电子票据未识别到验证报告",
-                    evidence="transport_invoice",
-                )
-            )
-        elif verification_docs:
-            ver_text = "\n".join(d.raw_text for d in verification_docs)
-            for inv_doc in grouped.get("transport_invoice", []):
-                inv_num = inv_doc.fields.get("invoice_number") or inv_doc.fields.get("ticket_number")
-                if inv_num and inv_num not in ver_text:
-                    issues.append(
-                        Issue(
-                            rule_id="R-INVOICE-003",
-                            severity="high",
-                            message=f"验证报告中未找到该发票记录 (票号: {inv_num})",
-                            evidence=inv_doc.path.name,
-                        )
-                    )
-        if "承诺首次报销不重复报销" not in all_text:
-            issues.append(
-                Issue(
-                    rule_id="R-INVOICE-004",
-                    severity="medium",
-                    message="未识别到首次报销不重复报销承诺",
                     evidence="transport_invoice",
                 )
             )

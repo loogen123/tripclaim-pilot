@@ -104,8 +104,22 @@ function logFileChecks(fileChecks) {
       addLog("文件通过", `${name}`);
     } else {
       const reason = item.reasons || "未提供原因";
-      addLog("文件未通过", `${name} | ${status} | 原因：${reason}`);
+      const debug = item.debug || {};
+      let debugMsg = "";
+      if (debug.match_mode === "no_match") {
+        debugMsg = ` | 诊断：未命中分类关键词, 文本长度=${debug.raw_text_len ?? "-"}`;
+      } else if (debug.match_mode === "keyword_score" && Array.isArray(debug.top_candidates) && debug.top_candidates.length > 0) {
+        const top = debug.top_candidates[0];
+        debugMsg = ` | 候选：${top.type}(${top.score})`;
+      }
+      addLog("文件未通过", `${name} | ${status} | 原因：${reason}${debugMsg}`);
     }
+  }
+}
+
+function logGlobalIssues(globalIssues) {
+  for (const item of globalIssues || []) {
+    addLog("全局未通过", `${item.message || "未知全局问题"}`);
   }
 }
 
@@ -212,9 +226,28 @@ async function runAudit() {
       return;
     }
     lastCase = runData;
+
+    // 渲染全局问题
+    const globalIssues = runData?.result?.global_issues || [];
+    const globalIssuesContainer = document.getElementById("globalIssuesContainer");
+    if (globalIssuesContainer) {
+      if (globalIssues.length > 0) {
+        let html = `<div style="background-color: #fff1f0; border: 1px solid #ffa39e; padding: 12px; margin-bottom: 16px; border-radius: 4px;">`;
+        html += `<h4 style="color: #cf1322; margin: 0 0 8px 0;">🔴 全局问题 (材料缺失等)</h4><ul style="margin: 0; padding-left: 20px; color: #cf1322;">`;
+        globalIssues.forEach(gi => {
+          html += `<li>${esc(gi.message)}</li>`;
+        });
+        html += `</ul></div>`;
+        globalIssuesContainer.innerHTML = html;
+      } else {
+        globalIssuesContainer.innerHTML = '';
+      }
+    }
+
     const fileChecks = runData?.result?.file_checks || [];
     renderBadFiles(fileChecks);
     renderCaseStats(runData);
+    logGlobalIssues(globalIssues);
     logFileChecks(fileChecks);
     setProgress(fileChecks.length, fileChecks.length);
     renderState(6);
